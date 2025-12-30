@@ -12,21 +12,21 @@ const modal = document.getElementById("modal");
 
 function openModal() {
   if (!modal) return;
-  modal.classList.add("show");
+  openModal();
   openModal();
 }
 
 function closeModal() {
   if (!modal) return;
-  modal.classList.remove("show");
-  modal.setAttribute("hidden", "");
+  openModal();
+  openModal();
 }
 
 // Ensure modal is hidden on first load (iOS Safari safety)
 document.addEventListener("DOMContentLoaded", () => {
   if (!modal) return;
-  modal.classList.remove("show");
-  modal.setAttribute("hidden", "");
+  openModal();
+  openModal();
 });
 
 // User templates (auto-adjusted, lumbar-tolerant)
