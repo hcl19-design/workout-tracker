@@ -1007,7 +1007,7 @@ function boot(){
   renderPRs();
   renderStats();
   renderAllDayPlans();
-  renderSchedule();        // ✅ ADD THIS
+  renderSchedule();        
   registerSW();
 }
 boot();
