@@ -26,6 +26,7 @@
   </header>
 
   <main class="container">
+    <!-- Current workout -->
     <section class="card" id="workoutCard">
       <div class="row space-between">
         <div>
@@ -36,7 +37,7 @@
         </div>
         <div class="row">
           <button class="btn" id="btnStart">Start</button>
-          <button class="btn danger" id="btnEnd" disabled>End & Save</button>
+          <button class="btn danger" id="btnEnd" disabled>End &amp; Save</button>
         </div>
       </div>
 
@@ -48,6 +49,7 @@
           <input id="exercise" list="exerciseList" placeholder="e.g., Leg Press" autocomplete="off" />
           <datalist id="exerciseList"></datalist>
         </div>
+
         <div class="field">
           <label>Load</label>
           <div class="row">
@@ -58,10 +60,12 @@
             </select>
           </div>
         </div>
+
         <div class="field">
           <label>Reps</label>
           <input id="reps" type="number" inputmode="numeric" placeholder="reps" />
         </div>
+
         <div class="field">
           <label>RPE (optional)</label>
           <input id="rpe" type="number" inputmode="decimal" step="0.5" min="1" max="10" placeholder="7.5" />
@@ -88,6 +92,7 @@
       <ul class="list" id="log"></ul>
     </section>
 
+    <!-- History + tabs -->
     <section class="card">
       <div class="row space-between">
         <h2>History</h2>
@@ -96,8 +101,10 @@
           <button class="btn ghost" id="btnClearAll" title="Clear all data">Clear all</button>
         </div>
       </div>
+
       <div class="divider"></div>
 
+      <!-- Tabs (buttons only) -->
       <div class="tabs">
         <button class="tab active" data-tab="workouts">Workouts</button>
         <button class="tab" data-tab="prs">PRs</button>
@@ -105,26 +112,20 @@
         <button class="tab" data-tab="schedule">Schedule</button>
         <button class="tab" data-tab="templates">Templates</button>
         <button class="tab" data-tab="back">Lower Back</button>
-        <div id="tab-schedule" class="tabpane">
-        <div class="muted small">
-    Tap a day to preview the full session. Tap “Start this day” to load it into Current Workout.
-  </div>
-
-  <div class="divider"></div>
-
-  <div id="scheduleList" class="cards"></div>
-</div>
       </div>
 
+      <!-- Workouts -->
       <div id="tab-workouts" class="tabpane active">
         <ul class="list" id="history"></ul>
       </div>
 
+      <!-- PRs -->
       <div id="tab-prs" class="tabpane">
         <div class="muted small">Best estimated 1RM per exercise (Epley).</div>
         <ul class="list" id="prs"></ul>
       </div>
 
+      <!-- Stats -->
       <div id="tab-stats" class="tabpane">
         <div class="grid stats">
           <div class="stat">
@@ -148,6 +149,7 @@
             <div class="hint">sets</div>
           </div>
         </div>
+
         <div class="divider"></div>
         <h3 class="h3">Weekly volume by muscle group</h3>
         <div class="muted small">Sets and approximate tonnage (kg·reps) over the last 7 days.</div>
@@ -159,30 +161,26 @@
         <ul class="list" id="muscleAll"></ul>
       </div>
 
-      <div id="tab-templates" class="tabpane">
-        <div class="muted small">Tap a template to load it into your current workout. If no workout is started, it will start one automatically.</div>
-        <div class="cards">
-          <div class="tcard">
-            <div class="kpi"><b>Day 1 – Lower (Back-Safe)</b></div>
-            <div class="muted small">Leg press + hams + abductors + calves + Zone 2</div>
-            <button class="btn" id="tplDay1">Load Day 1</button>
-          </div>
-          <div class="tcard">
-            <div class="kpi"><b>Day 2 – Upper Push (Shoulder-Friendly)</b></div>
-            <div class="muted small">Machine press + incline DB + laterals + fly + triceps</div>
-            <button class="btn" id="tplDay2">Load Day 2</button>
-          </div>
-          <div class="tcard">
-            <div class="kpi"><b>Day 3 – Upper Pull (Zero Low-Back Load)</b></div>
-            <div class="muted small">Chest-supported rows + pulldown + rear delts + curls</div>
-            <button class="btn" id="tplDay3">Load Day 3</button>
-          </div>
-          <div class="tcard">
-            <div class="kpi"><b>Day 4 – Glutes + Core + Conditioning</b></div>
-            <div class="muted small">Hip thrust + kickbacks + dead bug + Pallof + intervals</div>
-            <button class="btn" id="tplDay4">Load Day 4</button>
-          </div>
+      <!-- Schedule -->
+      <div id="tab-schedule" class="tabpane">
+        <div class="muted small">
+          Tap a day to preview the full session. Tap “Start this day” to load it into Current Workout.
         </div>
+        <div class="divider"></div>
+        <div id="scheduleList" class="cards"></div>
+      </div>
+
+      <!-- Templates (ALL days rendered here by JS into #dayPlans) -->
+      <div id="tab-templates" class="tabpane">
+        <div class="muted small">
+          <b>All days shown below:</b> Each day lists all exercises + planned sets. Enter kg/reps/RPE per set and tap
+          <b>Add to live log</b>.
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- JS should render Day 1–4 plan cards into this container -->
+        <div class="daygrid" id="dayPlans"></div>
 
         <div class="divider"></div>
 
@@ -190,9 +188,13 @@
         <pre class="pre" id="planText"></pre>
       </div>
 
+      <!-- Lower Back -->
       <div id="tab-back" class="tabpane">
         <h3 class="h3">Lower-back exercises (reference)</h3>
-        <div class="muted small">Built for your pattern (pain after training + next-morning stiffness). Start with Tier 1 daily, Tier 2 2–3×/week. Only add Tier 3 after morning pain ≤2/10 consistently.</div>
+        <div class="muted small">
+          Built for your pattern (pain after training + next-morning stiffness). Start with Tier 1 daily, Tier 2 2–3×/week.
+          Only add Tier 3 after morning pain ≤2/10 consistently.
+        </div>
 
         <h4 class="h4">Tier 1 — Daily</h4>
         <ul class="list">
@@ -229,6 +231,7 @@
     </section>
   </main>
 
+  <!-- Modal (history details) -->
   <div class="modal" id="modal" hidden>
     <div class="sheet">
       <div class="row space-between">
