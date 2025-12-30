@@ -13,7 +13,7 @@ const modal = document.getElementById("modal");
 function openModal() {
   if (!modal) return;
   modal.classList.add("show");
-  modal.removeAttribute("hidden");
+  openModal();
 }
 
 function closeModal() {
