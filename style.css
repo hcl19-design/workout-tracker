@@ -198,3 +198,16 @@ a.link{color:var(--accent); text-decoration:none}
 }
 .h3{ margin:10px 0 6px 0; font-size:16px; }
 .h4{ margin:10px 0 6px 0; font-size:14px; opacity:0.95; }
+
+/* FORCE modal to stay hidden unless explicitly opened */
+.modal[hidden] {
+  display: none !important;
+}
+
+.modal {
+  display: none;
+}
+
+.modal.show {
+  display: block;
+}
