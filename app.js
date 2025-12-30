@@ -999,6 +999,15 @@ function renderSchedule(){
   if(wrap.children.length === 0){
     wrap.innerHTML = `<div class="muted small">No schedule templates found.</div>`;
   }
-}
 
+function boot(){
+  wireUI();
+  renderExerciseDatalist();
+  renderHistory();
+  renderPRs();
+  renderStats();
+  renderAllDayPlans();
+  renderSchedule();        // ✅ ADD THIS
+  registerSW();
+}
 boot();
