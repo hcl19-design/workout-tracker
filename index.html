@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Workout Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <div class="appname">Workout Tracker</div>
+      <div class="subtitle" id="subtitle">Ready</div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnExport" title="Export">Export</button>
+      <button class="btn ghost" id="btnImport" title="Import">Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card" id="workoutCard">
+      <div class="row space-between">
+        <div>
+          <h2>Current workout</h2>
+          <div class="muted" id="sessionMeta">Not started</div>
+          <div class="muted small" id="templateMeta"></div>
+          <ul class="plan" id="planPreview"></ul>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnStart">Start</button>
+          <button class="btn danger" id="btnEnd" disabled>End & Save</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="grid">
+        <div class="field">
+          <label>Exercise</label>
+          <input id="exercise" list="exerciseList" placeholder="e.g., Leg Press" autocomplete="off" />
+          <datalist id="exerciseList"></datalist>
+        </div>
+        <div class="field">
+          <label>Load</label>
+          <div class="row">
+            <input id="load" type="number" inputmode="decimal" placeholder="kg" />
+            <div class="unitpill" id="unitPill" aria-label="Units">kg (lb)</div>
+            <select id="unit" hidden>
+              <option value="kg" selected>kg</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Reps</label>
+          <input id="reps" type="number" inputmode="numeric" placeholder="reps" />
+        </div>
+        <div class="field">
+          <label>RPE (optional)</label>
+          <input id="rpe" type="number" inputmode="decimal" step="0.5" min="1" max="10" placeholder="7.5" />
+        </div>
+      </div>
+
+      <div class="row space-between">
+        <div class="row">
+          <button class="btn" id="btnAddSet" disabled>Add set</button>
+          <button class="btn ghost" id="btnQuick" disabled>+1 rep</button>
+          <button class="btn ghost" id="btnClearFields" disabled>Clear</button>
+        </div>
+        <div class="row">
+          <button class="btn ghost" id="btnUndo" disabled>Undo</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row space-between">
+        <h3>Live log</h3>
+        <div class="muted" id="liveSummary">0 sets</div>
+      </div>
+      <ul class="list" id="log"></ul>
+    </section>
+
+    <section class="card">
+      <div class="row space-between">
+        <h2>History</h2>
+        <div class="row">
+          <input id="search" placeholder="Search exercise…" />
+          <button class="btn ghost" id="btnClearAll" title="Clear all data">Clear all</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="workouts">Workouts</button>
+        <button class="tab" data-tab="prs">PRs</button>
+        <button class="tab" data-tab="stats">Stats</button>
+        <button class="tab" data-tab="templates">Templates</button>
+        <button class="tab" data-tab="back">Lower Back</button>
+      </div>
+
+      <div id="tab-workouts" class="tabpane active">
+        <ul class="list" id="history"></ul>
+      </div>
+
+      <div id="tab-prs" class="tabpane">
+        <div class="muted small">Best estimated 1RM per exercise (Epley).</div>
+        <ul class="list" id="prs"></ul>
+      </div>
+
+      <div id="tab-stats" class="tabpane">
+        <div class="grid stats">
+          <div class="stat">
+            <div class="label">Last 7 days</div>
+            <div class="value" id="s7Workouts">0</div>
+            <div class="hint">workouts</div>
+          </div>
+          <div class="stat">
+            <div class="label">Last 7 days</div>
+            <div class="value" id="s7Sets">0</div>
+            <div class="hint">sets</div>
+          </div>
+          <div class="stat">
+            <div class="label">Total</div>
+            <div class="value" id="sAllWorkouts">0</div>
+            <div class="hint">workouts</div>
+          </div>
+          <div class="stat">
+            <div class="label">Total</div>
+            <div class="value" id="sAllSets">0</div>
+            <div class="hint">sets</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <h3 class="h3">Weekly volume by muscle group</h3>
+        <div class="muted small">Sets and approximate tonnage (kg·reps) over the last 7 days.</div>
+        <ul class="list" id="muscleWeek"></ul>
+
+        <div class="divider"></div>
+        <h3 class="h3">All-time volume by muscle group</h3>
+        <div class="muted small">Sets and approximate tonnage (kg·reps) across all logged workouts.</div>
+        <ul class="list" id="muscleAll"></ul>
+      </div>
+
+      <div id="tab-templates class="tabpane">
+        <div class="muted small">Tap a template to load it into your current workout. If no workout is started, it will start one automatically.</div>
+        <div class="cards">
+          <div class="tcard">
+            <div class="kpi"><b>Day 1 – Lower (Back-Safe)</b></div>
+            <div class="muted small">Leg press + hams + abductors + calves + Zone 2</div>
+            <button class="btn" id="tplDay1">Load Day 1</button>
+          </div>
+          <div class="tcard">
+            <div class="kpi"><b>Day 2 – Upper Push (Shoulder-Friendly)</b></div>
+            <div class="muted small">Machine press + incline DB + laterals + fly + triceps</div>
+            <button class="btn" id="tplDay2">Load Day 2</button>
+          </div>
+          <div class="tcard">
+            <div class="kpi"><b>Day 3 – Upper Pull (Zero Low-Back Load)</b></div>
+            <div class="muted small">Chest-supported rows + pulldown + rear delts + curls</div>
+            <button class="btn" id="tplDay3">Load Day 3</button>
+          </div>
+          <div class="tcard">
+            <div class="kpi"><b>Day 4 – Glutes + Core + Conditioning</b></div>
+            <div class="muted small">Hip thrust + kickbacks + dead bug + Pallof + intervals</div>
+            <button class="btn" id="tplDay4">Load Day 4</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <h3 class="h3">Full plan (reference)</h3>
+        <pre class="pre" id="planText"></pre>
+      </div>
+
+      <div id="tab-back" class="tabpane">
+        <h3 class="h3">Lower-back exercises (reference)</h3>
+        <div class="muted small">Built for your pattern (pain after training + next-morning stiffness). Start with Tier 1 daily, Tier 2 2–3×/week. Only add Tier 3 after morning pain ≤2/10 consistently.</div>
+
+        <h4 class="h4">Tier 1 — Daily</h4>
+        <ul class="list">
+          <li class="item"><div class="left"><div class="kpi">Dead Bug</div><div class="muted small">2–3 sets × 8–10/side (slow)</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Cat–Camel (gentle)</div><div class="muted small">1–2 sets × 6–8 reps</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Supine Pelvic Tilts</div><div class="muted small">2 sets × 10–15 reps</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Side-lying Decompression</div><div class="muted small">60–90 sec/side</div></div></li>
+        </ul>
+
+        <h4 class="h4">Tier 2 — 2–3×/week</h4>
+        <ul class="list">
+          <li class="item"><div class="left"><div class="kpi">Pallof Press</div><div class="muted small">2–3 sets × 10–12/side</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Side Plank</div><div class="muted small">2 sets × 20–40 sec</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Bird Dog</div><div class="muted small">2 sets × 6–8/side (3s hold)</div></div></li>
+        </ul>
+
+        <h4 class="h4">Tier 3 — Later (only after improvement)</h4>
+        <ul class="list">
+          <li class="item"><div class="left"><div class="kpi">Back Extension Machine (very light)</div><div class="muted small">2 sets × 12–15 (RPE ≤6)</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Reverse Hyper (if available)</div><div class="muted small">2–3 sets × 12–15 (controlled)</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Glute Bridge (bodyweight/machine)</div><div class="muted small">2–3 sets × 12–15</div></div></li>
+        </ul>
+
+        <div class="divider"></div>
+
+        <h3 class="h3">Post-workout spine reset (5–7 min)</h3>
+        <ul class="list">
+          <li class="item"><div class="left"><div class="kpi">90/90 Breathing</div><div class="muted small">2 min</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Knees-to-chest</div><div class="muted small">60 sec</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Side-lying decompression</div><div class="muted small">60 sec/side</div></div></li>
+          <li class="item"><div class="left"><div class="kpi">Easy walk</div><div class="muted small">3–5 min</div></div></li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="footer muted small">
+      Tip: On iPhone open in Safari → Share → <b>Add to Home Screen</b>.
+    </footer>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="sheet">
+      <div class="row space-between">
+        <div>
+          <div class="sheetTitle" id="modalTitle">Workout</div>
+          <div class="muted small" id="modalSub">Details</div>
+        </div>
+        <button class="btn ghost" id="btnClose">Close</button>
+      </div>
+      <div class="divider"></div>
+      <ul class="list" id="modalList"></ul>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
