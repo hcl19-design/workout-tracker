@@ -1,37 +1,55 @@
 /* Workout Tracker PWA (offline) - localStorage only */
 const LS_KEY = "wt_workouts_v1";
-const LS_EX = "wt_exercises_v1";
+const LS_EX  = "wt_exercises_v1";
 
 const $ = (id) => document.getElementById(id);
 
-function kgToLb(kg){ return Math.round(kg * 2.2046226218); }
-function fmtLoadKg(kg){ return `${kg}kg (${kgToLb(kg)}lb)`; }
-
-// ===== Modal control (FIX for stuck popup) =====
-const modal = document.getElementById("modal");
-
-function openModal() {
-  if (!modal) return;
-  openModal();
-  openModal();
+function kgToLb(kg){ return Math.round(Number(kg || 0) * 2.2046226218); }
+function fmtLoadKg(kg){
+  const n = Number(kg || 0);
+  return `${n} kg (${kgToLb(n)} lb)`;
 }
 
-function closeModal() {
-  if (!modal) return;
-  openModal();
-  openModal();
+// ===== Toast (small message, auto hides) =====
+let toastTimer = null;
+function toast(msg){
+  const sub = $("subtitle");
+  if(!sub) return;
+  sub.textContent = msg;
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> {
+    // revert only if not in session
+    if(!session) sub.textContent = "Ready";
+  }, 1600);
+}
+
+// ===== Modal control (FIX for stuck popup) =====
+const modal = $("modal");
+
+function openModalSheet(){
+  if(!modal) return;
+  modal.classList.add("show");
+  modal.removeAttribute("hidden");
+  modal.hidden = false; // belt + suspenders for iOS
+}
+
+function closeModalSheet(){
+  if(!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("hidden", "");
+  modal.hidden = true;
 }
 
 // Ensure modal is hidden on first load (iOS Safari safety)
 document.addEventListener("DOMContentLoaded", () => {
-  if (!modal) return;
-  openModal();
-  openModal();
+  if(!modal) return;
+  closeModalSheet();
 });
 
 // User templates (auto-adjusted, lumbar-tolerant)
 const TEMPLATES = {
   "Day 1 – Lower Body (Back-Safe Hypertrophy)": {
+    meta: "Leg press + hams + abductors + calves + Zone 2",
     plan: [
       {ex:"45° Leg Press (feet high, short ROM)", sets:3, reps:"10–12", rpe:"6–6.5"},
       {ex:"Seated Hamstring Curl", sets:3, reps:"10–14", rpe:"7"},
@@ -41,6 +59,7 @@ const TEMPLATES = {
     ]
   },
   "Day 2 – Upper Push (Shoulder-Friendly)": {
+    meta: "Machine press + incline DB + laterals + fly + triceps",
     plan: [
       {ex:"Machine Chest Press (neutral grip)", sets:4, reps:"8–12", rpe:"7–8"},
       {ex:"Low-Incline DB Press (bench supported)", sets:3, reps:"8–10", rpe:"7"},
@@ -50,6 +69,7 @@ const TEMPLATES = {
     ]
   },
   "Day 3 – Upper Pull (Zero Lower-Back Load)": {
+    meta: "Chest-supported rows + pulldown + rear delts + curls",
     plan: [
       {ex:"Chest-Supported Machine Row", sets:4, reps:"8–12", rpe:"7–8"},
       {ex:"Neutral-Grip Lat Pulldown", sets:3, reps:"8–12", rpe:"7"},
@@ -60,6 +80,7 @@ const TEMPLATES = {
     ]
   },
   "Day 4 – Glutes + Core + Conditioning (Lumbar-Recovery Bias)": {
+    meta: "Hip thrust + kickbacks + dead bug + Pallof + intervals",
     plan: [
       {ex:"Hip Thrust Machine", sets:3, reps:"10–12", rpe:"6–6.5"},
       {ex:"Cable or Machine Glute Kickback", sets:3, reps:"12–15", rpe:"7–8"},
@@ -85,7 +106,6 @@ Day 2 – Upper Push (Shoulder-Friendly)
 3) Cable Lateral Raise (scapular plane) — 3 sets | 12–15 reps | RPE 8
 4) Pec Deck or Cable Fly (mid-range only) — 3 sets | 12–15 reps | RPE 7–8
 5) Rope Triceps Pressdown — 3 sets | 10–14 reps | RPE 8
-Notes: No overhead pressing. No standing cable work.
 
 Day 3 – Upper Pull (Zero Lower-Back Load)
 1) Chest-Supported Machine Row — 4 sets | 8–12 reps | RPE 7–8
@@ -100,17 +120,9 @@ Day 4 – Glutes + Core + Conditioning (Lumbar-Recovery Bias)
 2) Cable or Machine Glute Kickback — 3 sets | 12–15 reps | RPE 7–8
 Core: Dead Bug — 2 sets | 8–10/side; Pallof Press — 2 sets | 10–12/side
 Conditioning: 8 min total — 40s work / 60s easy — RPE 7
-
-Lower Back Exercises (reference)
-Tier 1 (Daily): Dead Bug; Cat–Camel (gentle); Supine Pelvic Tilts; Side-lying Decompression
-Tier 2 (2–3×/week): Pallof Press; Side Plank; Bird Dog
-Tier 3 (later): Back extension machine (very light); Reverse hyper; Glute bridge
-
-Post-workout spine reset (5–7 min): 90/90 breathing 2 min; knees-to-chest 60s; side-lying decompression 60s/side; easy walk 3–5 min.
 `;
 
-
-let session = null;        // {id, startedAt, unit, sets:[]}
+let session = null;        // {id, startedAt, endedAt, sets:[], templateName?, plan?, planStrength?, planIndex?}
 let undoStack = [];        // store last removed set
 
 function nowISO(){ return new Date().toISOString(); }
@@ -122,7 +134,6 @@ function fmtDate(iso){
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, {year:"numeric",month:"short",day:"2-digit"});
 }
-function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
 
 function loadWorkouts(){
   try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
@@ -139,8 +150,6 @@ function saveExercises(exs){
   localStorage.setItem(LS_EX, JSON.stringify(exs));
 }
 
-function setSubtitle(text){ $("subtitle").textContent = text; }
-
 function startSession(){
   session = {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
@@ -156,7 +165,7 @@ function startSession(){
   $("btnClearFields").disabled = false;
   $("btnUndo").disabled = true;
   $("sessionMeta").textContent = `Started ${fmtDateTime(session.startedAt)}`;
-  setSubtitle("Workout in progress");
+  $("subtitle").textContent = "Workout in progress";
   renderLog();
   renderHistory();
 }
@@ -171,7 +180,9 @@ function endSession(){
   const workouts = loadWorkouts();
   workouts.unshift(session);
   saveWorkouts(workouts);
+
   session = null;
+  undoStack = [];
   $("btnStart").disabled = false;
   $("btnEnd").disabled = true;
   $("btnAddSet").disabled = true;
@@ -179,9 +190,12 @@ function endSession(){
   $("btnClearFields").disabled = true;
   $("btnUndo").disabled = true;
   $("sessionMeta").textContent = "Not started";
-  setSubtitle("Saved");
+  $("templateMeta").textContent = "";
+  $("planPreview").innerHTML = "";
+  $("subtitle").textContent = "Saved";
   $("log").innerHTML = "";
   $("liveSummary").textContent = "0 sets";
+
   renderHistory();
   renderPRs();
   renderStats();
@@ -189,67 +203,6 @@ function endSession(){
 
 function sanitizeExercise(name){
   return (name || "").trim().replace(/\s+/g, " ");
-}
-
-
-// Muscle-group mapping (heuristic) for weekly set totals
-const MUSCLE_GROUPS = ["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Calves","Core","Conditioning"];
-function muscleGroupsForExercise(exName){
-  const n = (exName||"").toLowerCase();
-  const gs = new Set();
-
-  // Conditioning / cardio
-  if(n.includes("treadmill") || n.includes("bike") || n.includes("elliptical") || n.includes("sled") || n.includes("rower") || n.includes("zone 2") || n.includes("interval") || n.includes("conditioning")){
-    gs.add("Conditioning");
-    return Array.from(gs);
-  }
-
-  // Core / trunk
-  if(n.includes("dead bug") || n.includes("pallof") || n.includes("plank") || n.includes("bird dog") || n.includes("cat") || n.includes("camel") || n.includes("pelvic tilt") || n.includes("core") || n.includes("carry")){
-    gs.add("Core");
-  }
-
-  // Lower
-  if(n.includes("leg press") || n.includes("hack squat") || n.includes("squat") || n.includes("leg extension")){
-    gs.add("Quads"); gs.add("Glutes");
-  }
-  if(n.includes("hamstring curl") || n.includes("leg curl") || n.includes("rdl") || n.includes("romanian") || n.includes("good morning")){
-    gs.add("Hamstrings"); gs.add("Glutes");
-  }
-  if(n.includes("hip thrust") || n.includes("glute bridge") || n.includes("kickback") || n.includes("abduction")){
-    gs.add("Glutes");
-  }
-  if(n.includes("calf")){
-    gs.add("Calves");
-  }
-  if(n.includes("lunge") || n.includes("split squat") || n.includes("step-up") || n.includes("step up")){
-    gs.add("Quads"); gs.add("Glutes");
-  }
-
-  // Upper push
-  if(n.includes("bench") || n.includes("chest press") || n.includes("pec") || n.includes("fly")){
-    gs.add("Chest"); gs.add("Triceps"); gs.add("Shoulders");
-  }
-  if(n.includes("triceps") || n.includes("pressdown") || n.includes("pushdown") || n.includes("skull")){
-    gs.add("Triceps");
-  }
-  if(n.includes("lateral raise") || n.includes("shoulder") || n.includes("overhead press") || n.includes("ohp")){
-    gs.add("Shoulders");
-  }
-
-  // Upper pull
-  if(n.includes("row") || n.includes("pulldown") || n.includes("pull-up") || n.includes("pull up") || n.includes("lat")){
-    gs.add("Back"); gs.add("Biceps");
-  }
-  if(n.includes("rear delt") || n.includes("reverse pec") || n.includes("face pull")){
-    gs.add("Shoulders"); gs.add("Back");
-  }
-  if(n.includes("curl") || n.includes("biceps")){
-    gs.add("Biceps");
-  }
-
-  // If no match, return empty => won’t affect totals
-  return Array.from(gs);
 }
 
 function addExerciseToList(name){
@@ -270,23 +223,20 @@ function getFieldValues(){
   const reps = Number($("reps").value);
   const rpeRaw = $("rpe").value;
   const rpe = rpeRaw === "" ? null : Number(rpeRaw);
-  const unit = "kg";
 
   if(!exercise) return {error:"Exercise is required."};
   if(!Number.isFinite(load) || load <= 0) return {error:"Load must be > 0."};
   if(!Number.isFinite(reps) || reps <= 0) return {error:"Reps must be > 0."};
   if(rpe !== null && (!Number.isFinite(rpe) || rpe < 1 || rpe > 10)) return {error:"RPE must be between 1 and 10."};
 
-  return {exercise, load, reps, rpe, unit};
+  return {exercise, load, reps, rpe};
 }
 
 function addSet(){
   if(!session) return;
   const v = getFieldValues();
-  if(v.error){
-    alert(v.error);
-    return;
-  }
+  if(v.error){ alert(v.error); return; }
+
   const set = {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     t: nowISO(),
@@ -294,8 +244,9 @@ function addSet(){
     load: v.load,
     reps: v.reps,
     rpe: v.rpe,
-    unit: v.unit
+    unit: "kg"
   };
+
   session.sets.push(set);
   addExerciseToList(v.exercise);
 
@@ -307,12 +258,34 @@ function addSet(){
   autoAdvanceFromPlan(v.exercise);
 }
 
-function quickPlusOneRep(){
-  const reps = Number($("reps").value);
-  if(Number.isFinite(reps)) $("reps").value = String(reps + 1);
-  else $("reps").value = "1";
+function addSetFromTemplate(exercise, loadKg, reps, rpe){
+  if(!session) startSession();
+
+  const set = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    t: nowISO(),
+    exercise: sanitizeExercise(exercise),
+    load: Number(loadKg),
+    reps: Number(reps),
+    rpe: (rpe === "" || rpe === null || rpe === undefined) ? null : Number(rpe),
+    unit: "kg"
+  };
+
+  session.sets.push(set);
+  addExerciseToList(set.exercise);
+
+  $("btnUndo").disabled = false;
+  undoStack = [];
+  renderLog();
+  renderPRs();
+  renderStats();
+  autoAdvanceFromPlan(set.exercise);
 }
 
+function quickPlusOneRep(){
+  const reps = Number($("reps").value);
+  $("reps").value = Number.isFinite(reps) ? String(reps + 1) : "1";
+}
 function clearFields(){
   $("load").value = "";
   $("reps").value = "";
@@ -329,7 +302,6 @@ function removeSet(setId){
     renderLog();
   }
 }
-
 function undo(){
   if(!session) return;
   if(undoStack.length === 0) return;
@@ -338,15 +310,14 @@ function undo(){
 }
 
 function calcE1RM(load, reps){
-  // Epley: 1RM = w*(1 + reps/30)
-  return load * (1 + reps/30);
+  return Number(load) * (1 + Number(reps)/30);
 }
-
 
 function renderPlanPreview(){
   const el = $("planPreview");
   const meta = $("templateMeta");
   if(!el || !meta) return;
+
   el.innerHTML = "";
   if(!session || !session.plan || session.plan.length===0){
     meta.textContent = "";
@@ -364,18 +335,20 @@ function loadTemplate(name){
   const tpl = TEMPLATES[name];
   if(!tpl) return;
   if(!session) startSession();
+
   session.templateName = name;
   session.plan = tpl.plan;
   session.planIndex = 0;
+
+  // strength-only list for auto-advance
   session.planStrength = tpl.plan.filter(p=>{
     const t = (p.ex||"").toLowerCase();
     return !(t.includes("treadmill") || t.includes("bike") || t.includes("sled") || t.includes("elliptical") || t.includes("zone 2") || t.includes("conditioning"));
   });
-  const first = tpl.plan.find(p=>{
-    const t = p.ex.toLowerCase();
-    return !(t.includes("treadmill") || t.includes("bike") || t.includes("sled") || t.includes("elliptical"));
-  });
-  if(first) $("exercise").value = first.ex;
+
+  const firstLift = session.planStrength[0];
+  if(firstLift) $("exercise").value = firstLift.ex;
+
   // add planned lifts to suggestions
   const exs = loadExercises();
   tpl.plan.forEach(p=>{
@@ -384,32 +357,30 @@ function loadTemplate(name){
   });
   exs.sort((a,b)=>a.localeCompare(b));
   saveExercises(exs);
+
   renderExerciseDatalist();
   renderPlanPreview();
   toast(`Loaded: ${name}`);
 }
 
-
-
 function autoAdvanceFromPlan(lastExercise){
   if(!session || !session.planStrength || session.planStrength.length===0) return;
+
   const normLast = sanitizeExercise(lastExercise).toLowerCase();
-  // Find current index based on input field if available
   let idx = session.planStrength.findIndex(p => sanitizeExercise(p.ex).toLowerCase() === normLast);
-  if(idx < 0){
-    idx = session.planIndex || 0;
-  }
-  // Count sets completed for this planned exercise
+  if(idx < 0) idx = session.planIndex || 0;
+
   const planned = session.planStrength[idx];
   if(!planned) return;
+
   const done = (session.sets||[]).filter(s => sanitizeExercise(s.exercise).toLowerCase() === sanitizeExercise(planned.ex).toLowerCase()).length;
   const target = Number(planned.sets) || 0;
+
   if(target > 0 && done >= target){
     const next = session.planStrength[idx+1];
     if(next){
       session.planIndex = idx+1;
       $("exercise").value = next.ex;
-      // keep prior load if user wants; clear reps/rpe to prompt
       $("reps").value = "";
       $("rpe").value = "";
       toast(`Next: ${next.ex}`);
@@ -435,6 +406,7 @@ function renderLog(){
   let count = 0;
   keys.forEach(ex => {
     const sets = grouped[ex];
+
     const header = document.createElement("li");
     header.className = "item";
     header.innerHTML = `
@@ -466,7 +438,7 @@ function renderLog(){
   });
 
   $("liveSummary").textContent = `${count} set${count===1?"":"s"}`;
-  if(session.sets.length === 0) $("btnUndo").disabled = true;
+  $("btnUndo").disabled = session.sets.length === 0;
 }
 
 function bestSetText(sets){
@@ -475,7 +447,7 @@ function bestSetText(sets){
     const e = calcE1RM(s.load, s.reps);
     if(e > best) best = e;
   });
-  return best > 0 ? `Best e1RM ~ ${best.toFixed(1)}${sets[0].unit}` : "";
+  return best > 0 ? `Best e1RM ~ ${best.toFixed(1)} kg` : "";
 }
 
 function groupSets(sets){
@@ -498,11 +470,17 @@ function renderExerciseDatalist(){
   });
 }
 
+function minutesBetween(aIso, bIso){
+  const a = new Date(aIso).getTime();
+  const b = new Date(bIso).getTime();
+  return Math.max(0, Math.round((b-a)/60000));
+}
+
 function renderHistory(){
   const historyEl = $("history");
   const workouts = loadWorkouts();
-
   const q = $("search").value.trim().toLowerCase();
+
   historyEl.innerHTML = "";
 
   workouts.forEach(w => {
@@ -511,6 +489,7 @@ function renderHistory(){
       const any = sets.some(s => (s.exercise||"").toLowerCase().includes(q));
       if(!any) return;
     }
+
     const totalSets = sets.length;
     const date = w.endedAt ? fmtDate(w.endedAt) : fmtDate(w.startedAt);
     const dur = w.endedAt ? minutesBetween(w.startedAt, w.endedAt) : null;
@@ -537,13 +516,6 @@ function renderHistory(){
   }
 }
 
-function minutesBetween(aIso, bIso){
-  const a = new Date(aIso).getTime();
-  const b = new Date(bIso).getTime();
-  const mins = Math.round((b-a)/60000);
-  return Math.max(0, mins);
-}
-
 function renderPRs(){
   const prsEl = $("prs");
   const workouts = loadWorkouts();
@@ -557,7 +529,7 @@ function renderPRs(){
       const e1 = calcE1RM(s.load, s.reps);
       const prev = best.get(key);
       if(!prev || e1 > prev.e1){
-        best.set(key, {e1, unit:s.unit, load:s.load, reps:s.reps, date: w.endedAt || w.startedAt});
+        best.set(key, {e1, load:s.load, reps:s.reps, date: w.endedAt || w.startedAt});
       }
     });
   });
@@ -571,9 +543,9 @@ function renderPRs(){
     li.innerHTML = `
       <div class="left">
         <div><b>${escapeHtml(ex)}</b></div>
-        <div class="muted small">${fmtDate(v.date)} • Best set ${v.load}${v.unit} × ${v.reps}</div>
+        <div class="muted small">${fmtDate(v.date)} • Best set ${fmtLoadKg(v.load)} × ${v.reps}</div>
       </div>
-      <div class="kpi">${v.e1.toFixed(1)}${v.unit}</div>
+      <div class="kpi">${v.e1.toFixed(1)} kg</div>
     `;
     prsEl.appendChild(li);
   });
@@ -586,6 +558,46 @@ function renderPRs(){
   }
 }
 
+// Weekly volume totals by muscle group (heuristic)
+const MUSCLE_GROUPS = ["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Calves","Core","Conditioning"];
+function muscleGroupsForExercise(exName){
+  const n = (exName||"").toLowerCase();
+  const gs = new Set();
+
+  if(n.includes("treadmill")||n.includes("bike")||n.includes("elliptical")||n.includes("sled")||n.includes("rower")||n.includes("zone 2")||n.includes("interval")||n.includes("conditioning")){
+    gs.add("Conditioning"); return [...gs];
+  }
+  if(n.includes("dead bug")||n.includes("pallof")||n.includes("plank")||n.includes("bird dog")||n.includes("cat")||n.includes("camel")||n.includes("pelvic tilt")||n.includes("core")){
+    gs.add("Core");
+  }
+  if(n.includes("leg press")||n.includes("hack squat")||n.includes("squat")||n.includes("leg extension")){
+    gs.add("Quads"); gs.add("Glutes");
+  }
+  if(n.includes("hamstring curl")||n.includes("leg curl")||n.includes("rdl")||n.includes("romanian")){
+    gs.add("Hamstrings"); gs.add("Glutes");
+  }
+  if(n.includes("hip thrust")||n.includes("glute bridge")||n.includes("kickback")||n.includes("abduction")){
+    gs.add("Glutes");
+  }
+  if(n.includes("calf")) gs.add("Calves");
+
+  if(n.includes("bench")||n.includes("chest press")||n.includes("pec")||n.includes("fly")){
+    gs.add("Chest"); gs.add("Triceps"); gs.add("Shoulders");
+  }
+  if(n.includes("triceps")||n.includes("pressdown")||n.includes("pushdown")) gs.add("Triceps");
+  if(n.includes("lateral raise")||n.includes("shoulder")) gs.add("Shoulders");
+
+  if(n.includes("row")||n.includes("pulldown")||n.includes("pull-up")||n.includes("pull up")||n.includes("lat")){
+    gs.add("Back"); gs.add("Biceps");
+  }
+  if(n.includes("rear delt")||n.includes("reverse pec")||n.includes("face pull")){
+    gs.add("Shoulders"); gs.add("Back");
+  }
+  if(n.includes("curl")||n.includes("biceps")) gs.add("Biceps");
+
+  return [...gs];
+}
+
 function renderStats(){
   const workouts = loadWorkouts();
   const now = Date.now();
@@ -593,7 +605,6 @@ function renderStats(){
 
   let w7=0, s7=0, wa=workouts.length, sa=0;
 
-  // Muscle-group weekly totals (sets + tonnage kg)
   const weekSets = Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
   const weekTonnage = Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
   const allSets = Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
@@ -604,19 +615,17 @@ function renderStats(){
     const setsArr = (w.sets||[]);
     const setsCount = setsArr.length;
     sa += setsCount;
-    if(t >= weekAgo){
-      w7 += 1;
-      s7 += setsCount;
-    }
+    if(t >= weekAgo){ w7 += 1; s7 += setsCount; }
+
     setsArr.forEach(s=>{
       const groups = muscleGroupsForExercise(s.exercise);
       const ton = (Number(s.load)||0) * (Number(s.reps)||0);
       groups.forEach(g=>{
-        allSets[g] = (allSets[g]||0) + 1;
-        allTonnage[g] = (allTonnage[g]||0) + ton;
+        allSets[g] += 1;
+        allTonnage[g] += ton;
         if(t >= weekAgo){
-          weekSets[g] = (weekSets[g]||0) + 1;
-          weekTonnage[g] = (weekTonnage[g]||0) + ton;
+          weekSets[g] += 1;
+          weekTonnage[g] += ton;
         }
       });
     });
@@ -627,15 +636,14 @@ function renderStats(){
   $("sAllWorkouts").textContent = String(wa);
   $("sAllSets").textContent = String(sa);
 
-  // Render weekly muscle totals (sets)
-  const weekEl = document.getElementById("muscleWeek");
-  const allEl = document.getElementById("muscleAll");
+  const weekEl = $("muscleWeek");
+  const allEl  = $("muscleAll");
   if(weekEl && allEl){
     weekEl.innerHTML = "";
-    allEl.innerHTML = "";
+    allEl.innerHTML  = "";
     const rows = MUSCLE_GROUPS
-      .filter(g => (weekSets[g]||0) > 0 || (allSets[g]||0) > 0)
-      .map(g => ({g, w:weekSets[g]||0, a:allSets[g]||0, wt:weekTonnage[g]||0, at:allTonnage[g]||0}));
+      .filter(g => weekSets[g] > 0 || allSets[g] > 0)
+      .map(g => ({g, w:weekSets[g], a:allSets[g], wt:weekTonnage[g], at:allTonnage[g]}));
 
     rows.forEach(r=>{
       const li=document.createElement("li");
@@ -655,8 +663,8 @@ function renderStats(){
 function switchTab(tab){
   document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
   document.querySelectorAll(".tabpane").forEach(p=>p.classList.remove("active"));
-  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
-  document.getElementById(`tab-${tab}`).classList.add("active");
+  document.querySelector(`.tab[data-tab="${tab}"]`)?.classList.add("active");
+  document.getElementById(`tab-${tab}`)?.classList.add("active");
 }
 
 function exportData(){
@@ -712,8 +720,9 @@ function clearAll(){
   $("btnClearFields").disabled = true;
   $("btnUndo").disabled = true;
   $("sessionMeta").textContent = "Not started";
-  setSubtitle("Cleared");
-  renderPlanPreview();
+  $("templateMeta").textContent = "";
+  $("planPreview").innerHTML = "";
+  $("subtitle").textContent = "Cleared";
   $("log").innerHTML = "";
   $("liveSummary").textContent = "0 sets";
   renderExerciseDatalist();
@@ -722,10 +731,11 @@ function clearAll(){
   renderStats();
 }
 
+// ===== History Modal =====
 function openWorkoutModal(workout){
   $("modalTitle").textContent = fmtDate(workout.endedAt || workout.startedAt);
   const dur = workout.endedAt ? `${minutesBetween(workout.startedAt, workout.endedAt)} min` : "";
-  $("modalSub").textContent = `${(workout.sets||[]).length} sets ${dur ? "• " + dur : ""}`;
+  $("modalSub").textContent = `${(workout.sets||[]).length} sets${dur ? " • " + dur : ""}`;
 
   const list = $("modalList");
   list.innerHTML = "";
@@ -735,20 +745,18 @@ function openWorkoutModal(workout){
     const li = document.createElement("li");
     li.className = "item";
     const best = Math.max(...sets.map(s => calcE1RM(s.load, s.reps)));
-    const unit = sets[0].unit || "kg";
     li.innerHTML = `
       <div class="left">
         <div><b>${escapeHtml(ex)}</b> <span class="badge">${sets.length} set${sets.length===1?"":"s"}</span></div>
-        <div class="muted small">${sets.map(s => `${s.load}${unit}×${s.reps}${s.rpe==null?"":`@${s.rpe}`}`).join(" • ")}</div>
+        <div class="muted small">${sets.map(s => `${fmtLoadKg(s.load)}×${s.reps}${s.rpe==null?"":`@${s.rpe}`}`).join(" • ")}</div>
       </div>
-      <div class="muted small kpi">${best.toFixed(1)}${unit}</div>
+      <div class="muted small kpi">${best.toFixed(1)} kg</div>
     `;
     list.appendChild(li);
   });
 
-  $("modal").hidden = false;
+  openModalSheet();
 }
-function closeModal(){ $("modal").hidden = true; }
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({
@@ -756,7 +764,142 @@ function escapeHtml(str){
   }[s]));
 }
 
-// Service worker registration
+// ===== NEW FEATURE: show ALL days with per-set inputs in Templates tab =====
+function renderAllDayPlans(){
+  const wrap = $("dayPlans");
+  if(!wrap) return;
+
+  wrap.innerHTML = "";
+  const days = Object.keys(TEMPLATES);
+
+  days.forEach((dayName) => {
+    const tpl = TEMPLATES[dayName];
+
+    const card = document.createElement("div");
+    card.className = "daycard";
+
+    const header = document.createElement("div");
+    header.className = "dayheader";
+
+    const left = document.createElement("div");
+    left.innerHTML = `<div class="daytitle">${dayName}</div><div class="daymeta">${tpl.meta || ""}</div>`;
+
+    const btnStart = document.createElement("button");
+    btnStart.className = "btn ghost";
+    btnStart.textContent = "Start this day";
+    btnStart.addEventListener("click", ()=>{
+      loadTemplate(dayName);
+      window.scrollTo({top:0, behavior:"smooth"});
+    });
+
+    header.appendChild(left);
+    header.appendChild(btnStart);
+    card.appendChild(header);
+
+    // exercise blocks
+    tpl.plan.forEach((p, pIdx) => {
+      const block = document.createElement("div");
+      block.className = "item";
+
+      const isTime = String(p.reps).toLowerCase().includes("min") || String(p.ex).toLowerCase().includes("treadmill") || String(p.ex).toLowerCase().includes("bike");
+
+      block.innerHTML = `
+        <div class="left">
+          <div class="kpi">${p.ex}</div>
+          <div class="muted small">${p.sets} sets • ${p.reps} • RPE ${p.rpe}</div>
+        </div>
+      `;
+
+      if(isTime){
+        const note = document.createElement("div");
+        note.className = "muted small";
+        note.textContent = "Cardio item (no set logging required).";
+        block.appendChild(note);
+        card.appendChild(block);
+        return;
+      }
+
+      // planned set rows
+      for(let s=1; s<=Number(p.sets||0); s++){
+        const row = document.createElement("div");
+        row.className = "planInputs";
+        row.style.marginTop = "8px";
+
+        const inKg = document.createElement("input");
+        inKg.type = "number";
+        inKg.inputMode = "decimal";
+        inKg.placeholder = `Set ${s} kg`;
+
+        const inReps = document.createElement("input");
+        inReps.type = "number";
+        inReps.inputMode = "numeric";
+        inReps.placeholder = "reps";
+
+        const inRpe = document.createElement("input");
+        inRpe.type = "number";
+        inRpe.step = "0.5";
+        inRpe.placeholder = "RPE";
+
+        row.appendChild(inKg);
+        row.appendChild(inReps);
+        row.appendChild(inRpe);
+
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.style.marginTop = "6px";
+        btn.textContent = "Add to live log";
+
+        btn.addEventListener("click", ()=>{
+          const kg = Number(inKg.value);
+          const reps = Number(inReps.value);
+          const rpe = inRpe.value ? Number(inRpe.value) : null;
+          if(!Number.isFinite(kg) || !Number.isFinite(reps)) return;
+
+          // ensure session and template are set
+          if(!session) startSession();
+          session.templateName = dayName;
+          session.plan = tpl.plan;
+          if(!session.planStrength){
+            session.planStrength = tpl.plan.filter(x=>{
+              const t = (x.ex||"").toLowerCase();
+              return !(t.includes("treadmill") || t.includes("bike") || t.includes("sled") || t.includes("elliptical") || t.includes("zone 2") || t.includes("conditioning"));
+            });
+          }
+
+          addSetFromTemplate(p.ex, kg, reps, rpe);
+
+          // auto-advance the main exercise input when planned sets completed
+          const done = (session.sets||[]).filter(x => sanitizeExercise(x.exercise).toLowerCase() === sanitizeExercise(p.ex).toLowerCase()).length;
+          if(done >= Number(p.sets||0)){
+            const next = tpl.plan.slice(pIdx+1).find(nx=>{
+              const t = (nx.ex||"").toLowerCase();
+              return !(String(nx.reps).toLowerCase().includes("min") || t.includes("treadmill") || t.includes("bike") || t.includes("conditioning"));
+            });
+            if(next) $("exercise").value = next.ex;
+          } else {
+            $("exercise").value = p.ex;
+          }
+
+          inKg.value = "";
+          inReps.value = "";
+          inRpe.value = "";
+        });
+
+        block.appendChild(row);
+        block.appendChild(btn);
+      }
+
+      card.appendChild(block);
+    });
+
+    wrap.appendChild(card);
+  });
+
+  // fill reference plan text if present
+  if($("planText")) $("planText").textContent = FULL_PLAN_TEXT;
+}
+
+// Service worker registration (safe if you have sw.js; otherwise it fails silently)
 async function registerSW(){
   if(!("serviceWorker" in navigator)) return;
   try{
@@ -767,41 +910,33 @@ async function registerSW(){
 }
 
 function wireUI(){
-  // templates + reference text
   if($("planText")) $("planText").textContent = FULL_PLAN_TEXT;
-  if($("tplDay1")) $("tplDay1").addEventListener("click", ()=>loadTemplate("Day 1 – Lower Body (Back-Safe Hypertrophy)"));
-  if($("tplDay2")) $("tplDay2").addEventListener("click", ()=>loadTemplate("Day 2 – Upper Push (Shoulder-Friendly)"));
-  if($("tplDay3")) $("tplDay3").addEventListener("click", ()=>loadTemplate("Day 3 – Upper Pull (Zero Lower-Back Load)"));
-  if($("tplDay4")) $("tplDay4").addEventListener("click", ()=>loadTemplate("Day 4 – Glutes + Core + Conditioning (Lumbar-Recovery Bias)"));
-  $("btnStart").addEventListener("click", startSession);
-  $("btnEnd").addEventListener("click", endSession);
-  $("btnAddSet").addEventListener("click", addSet);
-  $("btnQuick").addEventListener("click", quickPlusOneRep);
-  $("btnClearFields").addEventListener("click", clearFields);
-  $("btnUndo").addEventListener("click", undo);
 
-  $("search").addEventListener("input", () => {
-    renderHistory(); renderPRs();
-  });
+  $("btnStart")?.addEventListener("click", startSession);
+  $("btnEnd")?.addEventListener("click", endSession);
+  $("btnAddSet")?.addEventListener("click", addSet);
+  $("btnQuick")?.addEventListener("click", quickPlusOneRep);
+  $("btnClearFields")?.addEventListener("click", clearFields);
+  $("btnUndo")?.addEventListener("click", undo);
+
+  $("search")?.addEventListener("input", () => { renderHistory(); renderPRs(); });
 
   document.querySelectorAll(".tab").forEach(b=>{
     b.addEventListener("click", ()=> switchTab(b.dataset.tab));
   });
 
-  $("btnExport").addEventListener("click", exportData);
-  $("btnImport").addEventListener("click", () => $("importFile").click());
-  $("importFile").addEventListener("change", (e)=>{
+  $("btnExport")?.addEventListener("click", exportData);
+  $("btnImport")?.addEventListener("click", () => $("importFile")?.click());
+  $("importFile")?.addEventListener("change", (e)=>{
     const file = e.target.files?.[0];
     if(file) importDataFromFile(file);
     e.target.value = "";
   });
 
-  $("btnClearAll").addEventListener("click", clearAll);
+  $("btnClearAll")?.addEventListener("click", clearAll);
 
-  $("btnClose").addEventListener("click", closeModal);
-  $("modal").addEventListener("click", (e)=> {
-    if(e.target === $("modal")) closeModal();
-  });
+  $("btnClose")?.addEventListener("click", closeModalSheet);
+  modal?.addEventListener("click", (e)=> { if(e.target === modal) closeModalSheet(); });
 }
 
 function boot(){
@@ -810,6 +945,8 @@ function boot(){
   renderHistory();
   renderPRs();
   renderStats();
+  renderAllDayPlans();   // ✅ your requested feature
   registerSW();
 }
+
 boot();
