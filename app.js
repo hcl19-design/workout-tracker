@@ -7,6 +7,28 @@ const $ = (id) => document.getElementById(id);
 function kgToLb(kg){ return Math.round(kg * 2.2046226218); }
 function fmtLoadKg(kg){ return `${kg}kg (${kgToLb(kg)}lb)`; }
 
+// ===== Modal control (FIX for stuck popup) =====
+const modal = document.getElementById("modal");
+
+function openModal() {
+  if (!modal) return;
+  modal.classList.add("show");
+  modal.removeAttribute("hidden");
+}
+
+function closeModal() {
+  if (!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("hidden", "");
+}
+
+// Ensure modal is hidden on first load (iOS Safari safety)
+document.addEventListener("DOMContentLoaded", () => {
+  if (!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("hidden", "");
+});
+
 // User templates (auto-adjusted, lumbar-tolerant)
 const TEMPLATES = {
   "Day 1 – Lower Body (Back-Safe Hypertrophy)": {
